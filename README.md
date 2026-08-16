@@ -23,8 +23,16 @@ When you drop a file from one GNUstep app (e.g. GWorkspace) onto another GNUstep
 
 ### Building with GNUstep
 
-Make certain you have GNUstep installed and have sourced the GNUstep.sh file.  Once this is done you can install the enhanced features using build.sh.  This should install GNUstepLib (the library that integrates WINGs with GS) and then builds WINGs and wmaker.
+Make certain you have GNUstep installed and have sourced the GNUstep.sh file.  GNUstepLib is now part of the normal autotools build, so the standard flow builds and links the GNUstep integration library together with WINGs and wmaker:
+
+```
+./autogen.sh
+./configure
+make
+sudo -E make install
+```
+
+The `build.sh` script remains as a convenience wrapper for the same flow.
 
 Happy Hacking...
-
 
