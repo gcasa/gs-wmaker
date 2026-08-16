@@ -2125,11 +2125,11 @@ int wDockReceiveDNDDrop(WScreen *scr, XEvent *event)
 				btn->running = 0;
 		}
 
-		if (!strcmp(btn->wm_class, "GNUstep")) {
+		if (btn->wm_class && !strcmp(btn->wm_class, "GNUstep")) {
 			scr->xdest_is_gnustep = 1;
 		}
 		else {
-			scr->xdest_is_gnustep = 1;
+			scr->xdest_is_gnustep = 0;
 		}
 
 		btn->paste_launch = 0;

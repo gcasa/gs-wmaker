@@ -134,3 +134,8 @@ WindowMaker/IconSets/Default.iconset
 *~
 
 .pc
+obj
+*.fy
+*.nl
+*.1
+*.pc

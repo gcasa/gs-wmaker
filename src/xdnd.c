@@ -51,6 +51,36 @@ static Atom _XA_WINDOWMAKER_XDNDEXCHANGE;
 static Atom supported_typelist;
 static Atom selected_typelist;
 
+static Bool isGNUstepXDNDSource(Window window)
+{
+	char *wm_class = NULL;
+	char *wm_instance = NULL;
+	Bool result = False;
+
+	if (PropGetWMClass(window, &wm_class, &wm_instance) && wm_class && strcmp(wm_class, "GNUstep") == 0)
+		result = True;
+
+	free(wm_class);
+	free(wm_instance);
+
+	return result;
+}
+
+static char *quoteDroppedPath(const char *path)
+{
+	char *quoted;
+	size_t length;
+
+	if (!path || path[0] == '\0')
+		return NULL;
+
+	length = strlen(path) + 4;
+	quoted = wmalloc(length);
+	snprintf(quoted, length, " \"%s\"", path);
+
+	return quoted;
+}
+
 void wXDNDInitializeAtoms(void)
 {
 	_XA_XdndAware = XInternAtom(dpy, "XdndAware", False);
@@ -242,11 +272,11 @@ static Bool acceptXDND(Window window)
 static void wXDNDGetTypeList(Display *dpy, Window window)
 {
 	Atom type, *a;
-	Atom *typelist;
 	int format, i;
 	unsigned long count, remaining;
 	unsigned char *data = NULL;
 
+	selected_typelist = None;
 	XGetWindowProperty(dpy, window, _XA_XdndTypeList,
 						0, 0x8000000L, False, XA_ATOM,
 						&type, &format, &count, &remaining, &data);
@@ -259,19 +289,14 @@ static void wXDNDGetTypeList(Display *dpy, Window window)
 		return;
 	}
 
-	typelist = malloc((count + 1) * sizeof(Atom));
 	a = (Atom *) data;
 	for (i = 0; i < count; i++) {
-		typelist[i] = a[i];
-		fprintf(stderr, "xxxxxxxxxxxx\n");
-		if (typelist[i] == supported_typelist) {
-			selected_typelist = typelist[i];
+		if (a[i] == supported_typelist) {
+			selected_typelist = a[i];
 			break;
 		}
 	}
-	typelist[count] = 0;
 	XFree(data);
-	free(typelist);
 }
 void wXDNDGetTypeListValue(Display *dpy, Window window)
 {
@@ -280,9 +305,8 @@ void wXDNDGetTypeListValue(Display *dpy, Window window)
 
 Bool wIsXDNDSource(Display *dpy, Window window)
 {
-	Atom type, *a;
-	Atom *typelist;
-	int format, i;
+	Atom type;
+	int format;
 	unsigned long count, remaining;
 	unsigned char *data = NULL;
 
@@ -298,8 +322,16 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 {
 	if (event->message_type == _XA_XdndEnter) {
 
+		selected_typelist = None;
 		if (XDND_ENTER_THREE_TYPES(event)) {
-			selected_typelist = XDND_ENTER_TYPE(event, 0);
+			int i;
+
+			for (i = 0; i < 3; i++) {
+				if (XDND_ENTER_TYPE(event, i) == supported_typelist) {
+					selected_typelist = supported_typelist;
+					break;
+				}
+			}
 		} else {
 			wXDNDGetTypeList(dpy, XDND_ENTER_SOURCE_WIN(event));
 			/*
@@ -313,27 +345,27 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 		return True;
 	} else if (event->message_type == _XA_XdndDrop) {
 		if (XDND_DROP_SOURCE_WIN(event) == XGetSelectionOwner(dpy, _XA_XdndSelection)) {
-			XConvertSelection(dpy, _XA_XdndSelection, selected_typelist,
-					  _XA_WINDOWMAKER_XDNDEXCHANGE, event->window, CurrentTime);
+			if (selected_typelist != None) {
+				XConvertSelection(dpy, _XA_XdndSelection, selected_typelist,
+						  _XA_WINDOWMAKER_XDNDEXCHANGE, event->window, CurrentTime);
+			}
 
-			char *wm_class = NULL;
-			char *wm_instance = NULL;
-			if (PropGetWMClass(XDND_DROP_SOURCE_WIN(event), &wm_class, &wm_instance) && !strcmp(wm_class, "GNUstep")) {
-				char* fl = GSGetDroppedFilePath();
+			if (isGNUstepXDNDSource(XDND_DROP_SOURCE_WIN(event))) {
+				const char *fl = GSGetDroppedFilePath();
 				if (fl != NULL) {
 					WScreen *scr = wScreenForWindow(event->window);
-					scr->xdestring = fl;
+					scr->xdestring = quoteDroppedPath(fl);
 					wDockReceiveDNDDrop(scr, (XEvent*)event);
+					wfree(scr->xdestring);
+					free((char *)fl);
 				}
 			}
-			free(wm_class);
-			free(wm_instance);
 		}
 		return True;
 	} else if (event->message_type == _XA_XdndPosition) {
 		XEvent xevent;
 		Window srcwin = XDND_POSITION_SOURCE_WIN(event);
-		if (selected_typelist == supported_typelist) {
+		if (selected_typelist == supported_typelist || isGNUstepXDNDSource(srcwin)) {
 			memset(&xevent, 0, sizeof(xevent));
 			xevent.xany.type = ClientMessage;
 			xevent.xany.display = dpy;
