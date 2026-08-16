@@ -159,7 +159,7 @@ wmaker_LDADD = \
 	$(top_builddir)/WINGs/libWINGs.la\
 	$(top_builddir)/WINGs/libWUtil.la\
 	$(top_builddir)/wrlib/libwraster.la\
-	$(top_builddir)/WINGs/GNUstepLib/libWINGsGNUstep.la \
+	-L../WINGs/GNUstepLib/obj -lWINGsGNUstep \
 	@XLFLAGS@ \
 	@LIBXRANDR@ \
 	@LIBXINERAMA@ \

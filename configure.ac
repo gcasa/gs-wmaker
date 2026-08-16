@@ -94,16 +94,7 @@ AC_SUBST(WUTIL_VERSION)
 
 dnl Checks for programs
 dnl ===================
-AC_PATH_PROG([GNUSTEP_CONFIG], [gnustep-config], [no])
-AS_IF([test "x$GNUSTEP_CONFIG" = "xno"],
-    [AC_MSG_ERROR([gnustep-config is required for GNUstep integration. Source GNUstep.sh or install gnustep-make.])])
-
-AS_IF([test "x$OBJC" = "x"],
-    [gnustep_objc=`$GNUSTEP_CONFIG --variable=CC`
-     AS_IF([test "x$gnustep_objc" != "x"], [OBJC="$gnustep_objc"])])
-
 AC_PROG_CC
-AC_PROG_OBJC
 WM_PROG_CC_C11
 AC_PROG_LN_S
 AC_PROG_GCC_TRADITIONAL
@@ -454,14 +445,6 @@ dnl pkg-config
 dnl ==========
 PKG_PROG_PKG_CONFIG
 AS_IF([test -z "$PKG_CONFIG"],[AC_MSG_ERROR([pkg-config is required.])])
-
-
-dnl GNUstep
-dnl =======
-GNUSTEP_OBJCFLAGS=`$GNUSTEP_CONFIG --objc-flags`
-GNUSTEP_GUI_LIBS=`$GNUSTEP_CONFIG --gui-libs`
-AC_SUBST([GNUSTEP_OBJCFLAGS])
-AC_SUBST([GNUSTEP_GUI_LIBS])
 
 
 
@@ -927,7 +910,7 @@ AC_CONFIG_FILES(
     wrlib/tests/Makefile
 
     dnl WINGs toolkit
-    WINGs/Makefile WINGs/GNUstepLib/Makefile WINGs/WINGs/Makefile WINGs/po/Makefile
+    WINGs/Makefile WINGs/WINGs/Makefile WINGs/po/Makefile
     WINGs/Documentation/Makefile WINGs/Resources/Makefile WINGs/Extras/Makefile
     WINGs/Examples/Makefile WINGs/Tests/Makefile
 
@@ -970,7 +953,6 @@ echo "Supported graphic format libraries  :$supported_gfx"
 echo "Unsupported features                :$unsupported"
 echo "Antialiased text support in WINGs   : $xft"
 echo "Pango text layout support in WINGs  : $pango"
-echo "GNUstep integration                 : yes"
 echo "Translated languages to support     :$supported_locales"
 AS_IF([test "x$debug" = "xyes"],
     [AS_ECHO(["Debug enabled: CFLAGS = $CFLAGS"]) ])

@@ -1,22 +1,22 @@
 #!/bin/sh
 
-set -eu
+echo "Generate Configure"
+./autogen.sh && ./configure
 
-: "${MAKE:=make}"
-: "${SUDO:=sudo -E}"
+echo "Build GNUstepLib & install"
+cd WINGs/GNUstepLib
+make debug=yes
+sudo -E make install
 
-if [ ! -x ./configure ]; then
-  echo "Generating configure"
-  ./autogen.sh
-fi
+echo "Build WINGs & install"
+cd ..
+make
+sudo -E make install
 
-echo "Configuring Window Maker"
-./configure "$@"
-
-echo "Building Window Maker"
-$MAKE
-
-echo "Installing Window Maker"
-$SUDO $MAKE install
+echo "Build WindowMaker and install"
+cd ../
+make
+sudo -E make install
 
 echo "Done."
+exit 0
