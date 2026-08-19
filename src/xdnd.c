@@ -365,22 +365,20 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 	} else if (event->message_type == _XA_XdndPosition) {
 		XEvent xevent;
 		Window srcwin = XDND_POSITION_SOURCE_WIN(event);
-		if (selected_typelist == supported_typelist || isGNUstepXDNDSource(srcwin)) {
-			memset(&xevent, 0, sizeof(xevent));
-			xevent.xany.type = ClientMessage;
-			xevent.xany.display = dpy;
-			xevent.xclient.window = srcwin;
-			xevent.xclient.message_type = _XA_XdndStatus;
-			xevent.xclient.format = 32;
+		memset(&xevent, 0, sizeof(xevent));
+		xevent.xany.type = ClientMessage;
+		xevent.xany.display = dpy;
+		xevent.xclient.window = srcwin;
+		xevent.xclient.message_type = _XA_XdndStatus;
+		xevent.xclient.format = 32;
 
-			XDND_STATUS_TARGET_WIN(&xevent) = event->window;
-			XDND_STATUS_WILL_ACCEPT_SET(&xevent, acceptXDND(event->window));
-			XDND_STATUS_WANT_POSITION_SET(&xevent, True);
-			XDND_STATUS_RECT_SET(&xevent, 0, 0, 0, 0);
-			XDND_STATUS_ACTION(&xevent) = _XA_XdndActionCopy;
+		XDND_STATUS_TARGET_WIN(&xevent) = event->window;
+		XDND_STATUS_WILL_ACCEPT_SET(&xevent, acceptXDND(event->window));
+		XDND_STATUS_WANT_POSITION_SET(&xevent, True);
+		XDND_STATUS_RECT_SET(&xevent, 0, 0, 0, 0);
+		XDND_STATUS_ACTION(&xevent) = _XA_XdndActionCopy;
 
-			XSendEvent(dpy, srcwin, 0, 0, &xevent);
-		}
+		XSendEvent(dpy, srcwin, 0, 0, &xevent);
 		return True;
 	}
 	return False;
