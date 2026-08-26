@@ -36,6 +36,8 @@ Bool wIsXDNDSource(Display *dpy, Window window);
 
 /* XdndPosition */
 #define XDND_POSITION_SOURCE_WIN(e)     ((e)->data.l[0])
+#define XDND_POSITION_ROOT_X(e)         (((e)->data.l[2] >> 16) & 0xFFFF)
+#define XDND_POSITION_ROOT_Y(e)         ((e)->data.l[2] & 0xFFFF)
 
 /* XdndStatus */
 #define XDND_STATUS_TARGET_WIN(e)	((e)->xclient.data.l[0])

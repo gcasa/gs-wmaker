@@ -50,6 +50,7 @@ static Atom _XA_XdndTypeList;
 static Atom _XA_WINDOWMAKER_XDNDEXCHANGE;
 static Atom supported_typelist;
 static Atom selected_typelist;
+static WAppIcon *root_drag_icon;
 
 static Bool isGNUstepXDNDSource(Window window)
 {
@@ -79,6 +80,91 @@ static char *quoteDroppedPath(const char *path)
 	snprintf(quoted, length, " \"%s\"", path);
 
 	return quoted;
+}
+
+static void sendXDndFinished(Window target, Window source)
+{
+	XEvent xevent;
+
+	memset(&xevent, 0, sizeof(xevent));
+	xevent.xany.type = ClientMessage;
+	xevent.xany.display = dpy;
+	xevent.xclient.window = source;
+	xevent.xclient.message_type = _XA_XdndFinished;
+	xevent.xclient.format = 32;
+	XDND_FINISHED_TARGET_WIN(&xevent) = target;
+	XSendEvent(dpy, source, 0, 0, &xevent);
+}
+
+static WAppIcon *getRootDragIcon(WScreen *scr)
+{
+	if (!root_drag_icon)
+		root_drag_icon = wAppIconCreateForDrag(scr, "DUMMY", "DUMMY", "DUMMY");
+
+	return root_drag_icon;
+}
+
+static Bool updateRootDockDrag(WScreen *scr, XClientMessageEvent *event)
+{
+	XEvent motion;
+	WAppIcon *aicon = getRootDragIcon(scr);
+
+	memset(&motion, 0, sizeof(motion));
+	motion.type = MotionNotify;
+	motion.xmotion.display = dpy;
+	motion.xmotion.window = event->window;
+	motion.xmotion.root = scr->root_win;
+	motion.xmotion.x = XDND_POSITION_ROOT_X(event);
+	motion.xmotion.y = XDND_POSITION_ROOT_Y(event);
+	motion.xmotion.x_root = XDND_POSITION_ROOT_X(event);
+	motion.xmotion.y_root = XDND_POSITION_ROOT_Y(event);
+
+	wHandleAppIconDrag(aicon, &motion, 1);
+
+	return aicon->drag_dock != NULL;
+}
+
+static void clearRootDockDrag(WScreen *scr)
+{
+	if (root_drag_icon)
+		root_drag_icon->drag_dock = NULL;
+	XUnmapWindow(dpy, scr->dock_shadow);
+}
+
+static Bool receiveRootDockDrop(WScreen *scr, XClientMessageEvent *event)
+{
+	GSAppInfo info;
+	WAppIcon *aicon;
+	WDock *dock;
+	int x, y;
+
+	(void) event;
+
+	if (!root_drag_icon || !root_drag_icon->drag_dock)
+		return False;
+
+	info = GSGetDroppedAppInfo();
+	if (!info.cmd) {
+		free(info.name);
+		clearRootDockDrag(scr);
+		return False;
+	}
+
+	x = root_drag_icon->xindex;
+	y = root_drag_icon->yindex;
+	dock = root_drag_icon->drag_dock;
+
+	aicon = wAppIconCreateForDock(scr, info.cmd, info.name, "GNUstep", TILE_NORMAL);
+	wDockAttachIcon(dock, aicon, x, y, True);
+	aicon->running = 0;
+	aicon->docked = 1;
+	XMapWindow(dpy, aicon->icon->core->window);
+
+	free(info.cmd);
+	free(info.name);
+	clearRootDockDrag(scr);
+
+	return True;
 }
 
 void wXDNDInitializeAtoms(void)
@@ -130,7 +216,6 @@ Bool wXDNDProcessSelection(XEvent *event)
 	unsigned long ret_item;
 	unsigned long remain_byte;
 	char *delme;
-	XEvent xevent;
 	Window selowner = XGetSelectionOwner(dpy, _XA_XdndSelection);
 
 	XGetWindowProperty(dpy, event->xselection.requestor,
@@ -139,14 +224,7 @@ Bool wXDNDProcessSelection(XEvent *event)
 			   &ret_item, &remain_byte, (unsigned char **)&delme);
 
 	/*send finished */
-	memset(&xevent, 0, sizeof(xevent));
-	xevent.xany.type = ClientMessage;
-	xevent.xany.display = dpy;
-	xevent.xclient.window = selowner;
-	xevent.xclient.message_type = _XA_XdndFinished;
-	xevent.xclient.format = 32;
-	XDND_FINISHED_TARGET_WIN(&xevent) = event->xselection.requestor;
-	XSendEvent(dpy, selowner, 0, 0, &xevent);
+	sendXDndFinished(event->xselection.requestor, selowner);
 
 	/*process dropping */
 	if (delme) {
@@ -342,9 +420,20 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 		}
 		return True;
 	} else if (event->message_type == _XA_XdndLeave) {
+		WScreen *scr = wScreenForWindow(event->window);
+		if (scr && event->window == scr->root_win)
+			clearRootDockDrag(scr);
 		return True;
 	} else if (event->message_type == _XA_XdndDrop) {
 		if (XDND_DROP_SOURCE_WIN(event) == XGetSelectionOwner(dpy, _XA_XdndSelection)) {
+			WScreen *scr = wScreenForWindow(event->window);
+			if (scr && event->window == scr->root_win &&
+			    isGNUstepXDNDSource(XDND_DROP_SOURCE_WIN(event))) {
+				receiveRootDockDrop(scr, event);
+				sendXDndFinished(event->window, XDND_DROP_SOURCE_WIN(event));
+				return True;
+			}
+
 			if (selected_typelist != None) {
 				XConvertSelection(dpy, _XA_XdndSelection, selected_typelist,
 						  _XA_WINDOWMAKER_XDNDEXCHANGE, event->window, CurrentTime);
@@ -365,6 +454,12 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 	} else if (event->message_type == _XA_XdndPosition) {
 		XEvent xevent;
 		Window srcwin = XDND_POSITION_SOURCE_WIN(event);
+		WScreen *scr = wScreenForWindow(event->window);
+		Bool accept = acceptXDND(event->window);
+
+		if (scr && event->window == scr->root_win && isGNUstepXDNDSource(srcwin))
+			accept = updateRootDockDrag(scr, event);
+
 		memset(&xevent, 0, sizeof(xevent));
 		xevent.xany.type = ClientMessage;
 		xevent.xany.display = dpy;
@@ -373,7 +468,7 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 		xevent.xclient.format = 32;
 
 		XDND_STATUS_TARGET_WIN(&xevent) = event->window;
-		XDND_STATUS_WILL_ACCEPT_SET(&xevent, acceptXDND(event->window));
+		XDND_STATUS_WILL_ACCEPT_SET(&xevent, accept);
 		XDND_STATUS_WANT_POSITION_SET(&xevent, True);
 		XDND_STATUS_RECT_SET(&xevent, 0, 0, 0, 0);
 		XDND_STATUS_ACTION(&xevent) = _XA_XdndActionCopy;

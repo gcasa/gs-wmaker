@@ -54,6 +54,9 @@
 #include "geomview.h"
 #include "wmspec.h"
 #include "rootmenu.h"
+#ifdef USE_DOCK_XDND
+#include "xdnd.h"
+#endif
 
 #include "xinerama.h"
 
@@ -640,6 +643,9 @@ WScreen *wScreenInit(int screen_number)
 
 	event_mask = EVENT_MASK;
 	XSelectInput(dpy, scr->root_win, event_mask);
+#ifdef USE_DOCK_XDND
+	wXDNDMakeAwareness(scr->root_win);
+#endif
 
 #ifdef KEEP_XKB_LOCK_STATUS
 	/* Only GroupLock doesn't work correctly in my system since right-alt
