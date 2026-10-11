@@ -23,6 +23,7 @@
 #include "wconfig.h"
 
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/Xutil.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -375,6 +376,14 @@ static WAppIcon *wAppIconCreate(WWindow *leader_win)
 		aicon->wm_instance = wstrdup(leader_win->wm_instance);
 
 	aicon->icon = icon_create_for_wwindow(leader_win);
+	/* Let external docks identify this application tile without geometry
+	 * heuristics. Miniwindow icons and ordinary frames do not get this marker. */
+	{
+		Atom property = XInternAtom(dpy, "_WINDOWMAKER_APP_ICON", False);
+		Window owner = leader_win->client_win;
+		XChangeProperty(dpy, aicon->icon->core->window, property, XA_WINDOW,
+				32, PropModeReplace, (unsigned char *)&owner, 1);
+	}
 #ifdef USE_DOCK_XDND
 	wXDNDMakeAwareness(aicon->icon->core->window);
 #endif

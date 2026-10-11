@@ -51,6 +51,29 @@ static Atom _XA_WINDOWMAKER_XDNDEXCHANGE;
 static Atom supported_typelist;
 static Atom selected_typelist;
 static WAppIcon *root_drag_icon;
+static GSAppInfo root_drag_app_info;
+
+static void clearRootDragAppInfo(void)
+{
+	free(root_drag_app_info.cmd);
+	free(root_drag_app_info.name);
+	root_drag_app_info.cmd = NULL;
+	root_drag_app_info.name = NULL;
+}
+
+static Bool loadRootDragAppInfo(void)
+{
+	if (root_drag_app_info.cmd)
+		return True;
+
+	root_drag_app_info = GSGetDroppedAppInfo();
+	if (root_drag_app_info.cmd)
+		return True;
+
+	free(root_drag_app_info.name);
+	root_drag_app_info.name = NULL;
+	return False;
+}
 
 static Bool isGNUstepXDNDSource(Window window)
 {
@@ -108,16 +131,18 @@ static Bool updateRootDockDrag(WScreen *scr, XClientMessageEvent *event)
 {
 	XEvent motion;
 	WAppIcon *aicon = getRootDragIcon(scr);
+	int x = XDND_POSITION_ROOT_X(event) - wPreferences.icon_size / 2;
+	int y = XDND_POSITION_ROOT_Y(event) - wPreferences.icon_size / 2;
 
 	memset(&motion, 0, sizeof(motion));
 	motion.type = MotionNotify;
 	motion.xmotion.display = dpy;
 	motion.xmotion.window = event->window;
 	motion.xmotion.root = scr->root_win;
-	motion.xmotion.x = XDND_POSITION_ROOT_X(event);
-	motion.xmotion.y = XDND_POSITION_ROOT_Y(event);
-	motion.xmotion.x_root = XDND_POSITION_ROOT_X(event);
-	motion.xmotion.y_root = XDND_POSITION_ROOT_Y(event);
+	motion.xmotion.x = x;
+	motion.xmotion.y = y;
+	motion.xmotion.x_root = x;
+	motion.xmotion.y_root = y;
 
 	wHandleAppIconDrag(aicon, &motion, 1);
 
@@ -128,12 +153,12 @@ static void clearRootDockDrag(WScreen *scr)
 {
 	if (root_drag_icon)
 		root_drag_icon->drag_dock = NULL;
+	clearRootDragAppInfo();
 	XUnmapWindow(dpy, scr->dock_shadow);
 }
 
 static Bool receiveRootDockDrop(WScreen *scr, XClientMessageEvent *event)
 {
-	GSAppInfo info;
 	WAppIcon *aicon;
 	WDock *dock;
 	int x, y;
@@ -143,9 +168,7 @@ static Bool receiveRootDockDrop(WScreen *scr, XClientMessageEvent *event)
 	if (!root_drag_icon || !root_drag_icon->drag_dock)
 		return False;
 
-	info = GSGetDroppedAppInfo();
-	if (!info.cmd) {
-		free(info.name);
+	if (!loadRootDragAppInfo()) {
 		clearRootDockDrag(scr);
 		return False;
 	}
@@ -154,14 +177,12 @@ static Bool receiveRootDockDrop(WScreen *scr, XClientMessageEvent *event)
 	y = root_drag_icon->yindex;
 	dock = root_drag_icon->drag_dock;
 
-	aicon = wAppIconCreateForDock(scr, info.cmd, info.name, "GNUstep", TILE_NORMAL);
+	aicon = wAppIconCreateForDock(scr, root_drag_app_info.cmd, root_drag_app_info.name, "GNUstep", TILE_NORMAL);
 	wDockAttachIcon(dock, aicon, x, y, True);
 	aicon->running = 0;
 	aicon->docked = 1;
 	XMapWindow(dpy, aicon->icon->core->window);
 
-	free(info.cmd);
-	free(info.name);
 	clearRootDockDrag(scr);
 
 	return True;
@@ -427,8 +448,7 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 	} else if (event->message_type == _XA_XdndDrop) {
 		if (XDND_DROP_SOURCE_WIN(event) == XGetSelectionOwner(dpy, _XA_XdndSelection)) {
 			WScreen *scr = wScreenForWindow(event->window);
-			if (scr && event->window == scr->root_win &&
-			    isGNUstepXDNDSource(XDND_DROP_SOURCE_WIN(event))) {
+			if (scr && event->window == scr->root_win && loadRootDragAppInfo()) {
 				receiveRootDockDrop(scr, event);
 				sendXDndFinished(event->window, XDND_DROP_SOURCE_WIN(event));
 				return True;
@@ -457,7 +477,7 @@ Bool wXDNDProcessClientMessage(XClientMessageEvent *event)
 		WScreen *scr = wScreenForWindow(event->window);
 		Bool accept = acceptXDND(event->window);
 
-		if (scr && event->window == scr->root_win && isGNUstepXDNDSource(srcwin))
+		if (scr && event->window == scr->root_win && loadRootDragAppInfo())
 			accept = updateRootDockDrag(scr, event);
 
 		memset(&xevent, 0, sizeof(xevent));
